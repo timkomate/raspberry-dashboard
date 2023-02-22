@@ -11,6 +11,7 @@ from sqlalchemy.sql import text
 import pandas as pd
 from astral import sun
 from astral import Observer
+import pytz
 
 def check_engines(engine1, engine2):
     return engine1.ping() and engine2.ping()
@@ -33,17 +34,20 @@ app = Dash(__name__, external_stylesheets=[dbc.themes.SOLAR])
 def update_output(start_date, end_date):
     start_date_object = date.fromisoformat(start_date)
     end_date_object = date.fromisoformat(end_date)
+    local_tz = pytz.timezone("Europe/Budapest")
     sql = f"SELECT * FROM Data WHERE date BETWEEN '{start_date_object}' AND '{end_date_object}';"
     with engine_inside.connect() as conn:
         query = conn.execute(text(sql))
         print("Fetched from inside")
         df_inside = pd.DataFrame(query.fetchall())
-        df_i_desc = df_inside.describe()
+        df_inside["date"] = df_inside["date"].dt.tz_localize("UTC")
+        df_inside["date"] = df_inside["date"].dt.tz_convert(local_tz)
     with engine_outside.connect() as conn:
         query = conn.execute(text(sql))
         print("Fetched from outside")
         df_outside = pd.DataFrame(query.fetchall())
-        df_o_desc = df_outside.describe()
+        df_outside["date"] = df_outside["date"].dt.tz_localize("UTC")
+        df_outside["date"] = df_outside["date"].dt.tz_convert(local_tz)
 
     fig = make_subplots(rows=4, cols=1, shared_xaxes=True)
     fig.add_trace(
