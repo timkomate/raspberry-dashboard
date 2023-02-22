@@ -9,7 +9,8 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from sqlalchemy.sql import text
 import pandas as pd
-
+from astral import sun
+from astral import Observer
 
 def check_engines(engine1, engine2):
     return engine1.ping() and engine2.ping()
@@ -30,8 +31,6 @@ app = Dash(__name__, external_stylesheets=[dbc.themes.SOLAR])
     Input("my-date-picker-range", "end_date"),
 )
 def update_output(start_date, end_date):
-    today = date.today()
-    tomorrow = today + timedelta(days=1)
     start_date_object = date.fromisoformat(start_date)
     end_date_object = date.fromisoformat(end_date)
     sql = f"SELECT * FROM Data WHERE date BETWEEN '{start_date_object}' AND '{end_date_object}';"
@@ -40,7 +39,6 @@ def update_output(start_date, end_date):
         print("Fetched from inside")
         df_inside = pd.DataFrame(query.fetchall())
         df_i_desc = df_inside.describe()
-
     with engine_outside.connect() as conn:
         query = conn.execute(text(sql))
         print("Fetched from outside")
@@ -104,6 +102,11 @@ def update_output(start_date, end_date):
     )
     return fig
 
+def get_daily_info():
+    observer = Observer(47.49801, 19.03991)
+    sunrise = sun.sunrise(observer, date = date.today(), tzinfo = "Europe/Budapest")
+    sunset = sun.sunset(observer, date = date.today(), tzinfo = "Europe/Budapest")
+    return f'Today: {date.today()}. Sunrise: {sunrise.strftime("%H:%M:%S")} Sunset: {sunset.strftime("%H:%M:%S")}'
 
 def generate_layout():
     today = date.today()
@@ -116,7 +119,7 @@ def generate_layout():
                     "textAlign": "center",
                 },
             ),
-            html.P(f"Today is {datetime.now()}"),
+            html.H3(f"{get_daily_info()}"),
             dcc.DatePickerRange(
                 id="my-date-picker-range",
                 min_date_allowed=date(2019, 5, 1),
