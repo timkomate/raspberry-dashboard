@@ -1,29 +1,38 @@
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 from dash import Dash, dcc, html, dash_table
 import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output
-import plotly.tools as tls
 import sqlalchemy
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
-from sqlalchemy.sql import text
 import pandas as pd
-from astral import sun
-from astral import Observer
+from astral import sun, Observer
 import pytz
-
-def check_engines(engine1, engine2):
-    return engine1.ping() and engine2.ping()
-
-
-def init_clients(url1, url2):
-    engine1 = sqlalchemy.create_engine(url1)
-    engine2 = sqlalchemy.create_engine(url2)
-    return [engine1, engine2]
 
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.SOLAR])
+
+
+def init_clients(url1, url2):
+    engine1 = sqlalchemy.create_engine(url1, pool_pre_ping=True)
+    engine2 = sqlalchemy.create_engine(url2, pool_pre_ping=True)
+    return [engine1, engine2]
+
+
+def get_data(engine, table, start_date, end_date):
+    sql = f"SELECT * FROM {table} WHERE date BETWEEN '{start_date}' AND '{end_date}';"
+    try:
+        with engine.connect() as conn:
+            df = pd.read_sql(sql, conn)
+            df["date"] = pd.to_datetime(df["date"])
+            df["date"] = (
+                df["date"].dt.tz_localize("UTC").dt.tz_convert("Europe/Budapest")
+            )
+    except Exception as e:
+        print(f"Error: {e}")
+        df = pd.DataFrame()
+    return df
 
 
 @app.callback(
@@ -34,25 +43,21 @@ app = Dash(__name__, external_stylesheets=[dbc.themes.SOLAR])
 def update_output(start_date, end_date):
     start_date_object = date.fromisoformat(start_date)
     end_date_object = date.fromisoformat(end_date)
-    local_tz = pytz.timezone("Europe/Budapest")
-    sql = f"SELECT * FROM Data WHERE date BETWEEN '{start_date_object}' AND '{end_date_object}';"
-    with engine_inside.connect() as conn:
-        query = conn.execute(text(sql))
-        print("Fetched from inside")
-        df_inside = pd.DataFrame(query.fetchall())
-        df_inside["date"] = df_inside["date"].dt.tz_localize("UTC")
-        df_inside["date"] = df_inside["date"].dt.tz_convert(local_tz)
-    with engine_outside.connect() as conn:
-        query = conn.execute(text(sql))
-        print("Fetched from outside")
-        df_outside = pd.DataFrame(query.fetchall())
-        df_outside["date"] = df_outside["date"].dt.tz_localize("UTC")
-        df_outside["date"] = df_outside["date"].dt.tz_convert(local_tz)
-
+    engines = init_clients(url_inside, url_outside)
+    df_inside = get_data(engines[0], "Data_raspberry3", start_date, end_date)
+    df_inside2 = get_data(engines[0], "Data_ESP8266", start_date, end_date)
+    df_outside = get_data(engines[1], "Data", start_date, end_date)
     fig = make_subplots(rows=4, cols=1, shared_xaxes=True)
     fig.add_trace(
         go.Scatter(
             x=df_inside["date"], y=df_inside["temperature"], name="temperature inside"
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df_inside2["date"], y=df_inside2["temperature"], name="temperature ESP8266"
         ),
         row=1,
         col=1,
@@ -70,6 +75,13 @@ def update_output(start_date, end_date):
     fig.add_trace(
         go.Scatter(
             x=df_inside["date"], y=df_inside["humidity"], name="humidity inside"
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df_inside2["date"], y=df_inside2["humidity"], name="humidity ESP8266"
         ),
         row=2,
         col=1,
@@ -106,11 +118,13 @@ def update_output(start_date, end_date):
     )
     return fig
 
+
 def get_daily_info():
     observer = Observer(47.49801, 19.03991)
-    sunrise = sun.sunrise(observer, date = date.today(), tzinfo = "Europe/Budapest")
-    sunset = sun.sunset(observer, date = date.today(), tzinfo = "Europe/Budapest")
+    sunrise = sun.sunrise(observer, date=date.today(), tzinfo="Europe/Budapest")
+    sunset = sun.sunset(observer, date=date.today(), tzinfo="Europe/Budapest")
     return f'Today: {date.today()}. Sunrise: {sunrise.strftime("%H:%M:%S")} Sunset: {sunset.strftime("%H:%M:%S")}'
+
 
 def generate_layout():
     today = date.today()
@@ -132,7 +146,6 @@ def generate_layout():
                 end_date=date(tomorrow.year, tomorrow.month, tomorrow.day),
                 start_date=date(today.year, today.month, today.day),
             ),
-            html.Div(id="output-container-date-picker-range"),
             dcc.Graph(id="graph-inside", figure={}),
             dcc.Interval(
                 id="interval-component", interval=60 * 60 * 1000, n_intervals=0
@@ -150,7 +163,6 @@ def update_layout(n):
 if __name__ == "__main__":
     url_inside = "mariadb+mariadbconnector://root:my-secret-pw@0.0.0.0:3308/inside"
     url_outside = "mariadb+mariadbconnector://root:my-secret-pw@0.0.0.0:3308/outside"
-    engine_inside, engine_outside = init_clients(url_inside, url_outside)
     print("Start...")
     app.layout = generate_layout()
 
