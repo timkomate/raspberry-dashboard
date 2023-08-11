@@ -46,11 +46,12 @@ def update_output(start_date, end_date):
     engines = init_clients(url_inside, url_outside)
     df_inside = get_data(engines[0], "Data_raspberry3", start_date, end_date)
     df_inside2 = get_data(engines[0], "Data_ESP8266", start_date, end_date)
+    df_inside3 = get_data(engines[0], "Data_raspberry4", start_date, end_date)
     df_outside = get_data(engines[1], "Data", start_date, end_date)
     fig = make_subplots(rows=4, cols=1, shared_xaxes=True)
     fig.add_trace(
         go.Scatter(
-            x=df_inside["date"], y=df_inside["temperature"], name="temperature inside"
+            x=df_inside["date"], y=df_inside["temperature"], name="temperature raspberry3"
         ),
         row=1,
         col=1,
@@ -58,6 +59,13 @@ def update_output(start_date, end_date):
     fig.add_trace(
         go.Scatter(
             x=df_inside2["date"], y=df_inside2["temperature"], name="temperature ESP8266"
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df_inside3["date"], y=df_inside3["temperature"], name="temperature raspberry4"
         ),
         row=1,
         col=1,
@@ -74,7 +82,7 @@ def update_output(start_date, end_date):
     )
     fig.add_trace(
         go.Scatter(
-            x=df_inside["date"], y=df_inside["humidity"], name="humidity inside"
+            x=df_inside["date"], y=df_inside["humidity"], name="humidity raspberry3"
         ),
         row=2,
         col=1,
@@ -82,6 +90,13 @@ def update_output(start_date, end_date):
     fig.add_trace(
         go.Scatter(
             x=df_inside2["date"], y=df_inside2["humidity"], name="humidity ESP8266"
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=df_inside3["date"], y=df_inside3["humidity"], name="humidity raspberry4"
         ),
         row=2,
         col=1,
